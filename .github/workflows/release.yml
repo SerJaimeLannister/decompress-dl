@@ -1,0 +1,49 @@
+name: Build & Release Go Single-File Binary
+
+on:
+  # Triggers the workflow when a new tag (e.g., v1.0.0) is pushed
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+env:
+  BINARY_NAME: downloader-service # Matches the name in build.sh and start.sh
+  ASSET_NAME: decompress-dl-linux-amd64 # A descriptive name for the release asset
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create the GitHub Release
+
+    steps:
+      - name: 1. Checkout code
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Go environment
+        uses: actions/setup-go@v5
+        with:
+          # Go 1.16+ is required for the go:embed feature
+          go-version: '1.25'
+
+      - name: 3. Build Go Single-File Binary (Linux/AMD64)
+        # CGO_ENABLED=0 ensures a static, minimal binary
+        # The go:embed directive includes 'templates/' in this single file.
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ${{ env.BINARY_NAME }} main.go
+
+      - name: 4. Create Deployment Archive (Containing only the Binary)
+        # Create a compressed tarball containing just the final executable.
+        run: tar -czf ${{ env.ASSET_NAME }}.tar.gz ${{ env.BINARY_NAME }}
+
+      - name: 5. Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ASSET_NAME }}.tar.gz
+          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
