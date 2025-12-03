@@ -457,5 +457,5 @@ func main() {
 	})
 
 	fmt.Println("Running on http://localhost:8080")
-	r.Run(":8080")
+	r.Run("0.0.0.0:8080")
 }
