@@ -4,7 +4,9 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"embed" // <-- NEW: Import embed package
 	"fmt"
+	"html/template" // <-- NEW: Import html/template
 	"io"
 	"mime"
 	"net/http"
@@ -18,6 +20,9 @@ import (
 	"github.com/google/uuid"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
+
+//go:embed templates/* <-- NEW: Directive to embed all files in templates/
+var templatesFS embed.FS // <-- NEW: Variable to hold the embedded files
 
 // --- Data Structures ---
 type JobStatus string
@@ -330,7 +335,10 @@ func processJob(job Job, payload map[string]interface{}) {
 
 func main() {
 	r := gin.Default()
-	r.LoadHTMLGlob("templates/*")
+	
+	// NEW: Load templates from the embedded filesystem
+	tmpl := template.Must(template.New("").ParseFS(templatesFS, "templates/*"))
+	r.SetHTMLTemplate(tmpl)
 
 	os.MkdirAll("./downloads", 0755)
 
