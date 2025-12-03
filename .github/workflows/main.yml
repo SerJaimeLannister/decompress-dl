@@ -1,71 +1,55 @@
-name: CI/CD Build & Publish
+name: Build & Release Go Binaries
 
 on:
+  # Triggers the workflow when a new tag (e.g., v1.0.0) is pushed
   push:
-    branches:
-      - main
-  # Optional: Allows manual triggering from the GitHub Actions UI
-  workflow_dispatch:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 env:
-  # Replace 'media-app' with your desired image name
-  IMAGE_NAME: media-app
-  # The binary name used in your Dockerfile STAGE 1
-  BINARY_NAME: media-app
+  BINARY_NAME: media-app # Matches the name in your Dockerfile
+  ASSET_NAME: media-app-linux-amd64 # The name for the released file
 
 jobs:
-  build-and-publish:
+  release:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write # Needed for pushing to GHCR
-      actions: write # Needed for uploading artifacts
+      contents: write # Needed to create the GitHub Release
 
     steps:
-      - name: 1. Checkout repository
+      - name: 1. Checkout code
         uses: actions/checkout@v4
 
-      # --- Build and Upload Raw Go Binary (for non-Docker deployment) ---
-      - name: 2. Set up Go environment
+      - name: 2. Setup Go environment
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
 
       - name: 3. Build Go Binary (Linux/AMD64)
+        # CGO_ENABLED=0 ensures a static, minimal binary
+        # GOOS=linux GOARCH=amd64 targets a standard server environment
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ${{ env.BINARY_NAME }} main.go
 
-      - name: 4. Upload Go Binary as Artifact
-        uses: actions/upload-artifact@v4
+      - name: 4. Create Deployment Archive
+        # Bundle the binary and the templates folder into a single .tar.gz
+        run: |
+          # Ensure templates directory exists before packaging
+          if [ ! -d "templates" ]; then
+            echo "Error: 'templates' directory not found!"
+            exit 1
+          fi
+          # Create the archive
+          tar -czf ${{ env.ASSET_NAME }}.tar.gz ${{ env.BINARY_NAME }} templates/
+
+      - name: 5. Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
         with:
-          name: ${{ env.BINARY_NAME }}-linux-amd64
-          path: ${{ env.BINARY_NAME }}
-          retention-days: 7
-
-      # --- Build and Push Docker Image (the recommended artifact) ---
-      - name: 5. Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: 6. Log in to GitHub Container Registry (GHCR)
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          # The GITHUB_TOKEN has 'packages:write' permission by default
-          password: ${{ secrets.GITHUB_TOKEN }} 
-
-      - name: 7. Get short SHA for tagging
-        id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-      - name: 8. Build and Push Docker Image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          files: ${{ env.ASSET_NAME }}.tar.gz
+          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
