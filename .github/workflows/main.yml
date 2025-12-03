@@ -1,4 +1,4 @@
-name: Build & Release Go Binaries
+name: Build & Release Go Single-File Binary
 
 on:
   # Triggers the workflow when a new tag (e.g., v1.0.0) is pushed
@@ -7,8 +7,8 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
 env:
-  BINARY_NAME: media-app # Matches the name in your Dockerfile
-  ASSET_NAME: media-app-linux-amd64 # The name for the released file
+  BINARY_NAME: downloader-service # Matches the name in build.sh and start.sh
+  ASSET_NAME: decompress-dl-linux-amd64 # A descriptive name for the release asset
 
 jobs:
   release:
@@ -23,24 +23,18 @@ jobs:
       - name: 2. Setup Go environment
         uses: actions/setup-go@v5
         with:
+          # Go 1.16+ is required for the go:embed feature
           go-version: '1.25'
 
-      - name: 3. Build Go Binary (Linux/AMD64)
+      - name: 3. Build Go Single-File Binary (Linux/AMD64)
         # CGO_ENABLED=0 ensures a static, minimal binary
-        # GOOS=linux GOARCH=amd64 targets a standard server environment
+        # The go:embed directive includes 'templates/' in this single file.
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ${{ env.BINARY_NAME }} main.go
 
-      - name: 4. Create Deployment Archive
-        # Bundle the binary and the templates folder into a single .tar.gz
-        run: |
-          # Ensure templates directory exists before packaging
-          if [ ! -d "templates" ]; then
-            echo "Error: 'templates' directory not found!"
-            exit 1
-          fi
-          # Create the archive
-          tar -czf ${{ env.ASSET_NAME }}.tar.gz ${{ env.BINARY_NAME }} templates/
+      - name: 4. Create Deployment Archive (Containing only the Binary)
+        # Create a compressed tarball containing just the final executable.
+        run: tar -czf ${{ env.ASSET_NAME }}.tar.gz ${{ env.BINARY_NAME }}
 
       - name: 5. Create GitHub Release
         id: create_release
