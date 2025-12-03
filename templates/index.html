@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Go Media Downloader</title>
+        <style>
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    Helvetica, Arial, sans-serif;
+                max-width: 900px;
+                margin: 2rem auto;
+                padding: 0 1rem;
+                background-color: #f4f6f8;
+                color: #333;
+            }
+            .card {
+                background: white;
+                border: 1px solid #e1e4e8;
+                padding: 1.5rem;
+                border-radius: 8px;
+                margin-bottom: 1rem;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            }
+            h3 {
+                margin-top: 0;
+                color: #24292e;
+            }
+
+            /* Inputs & Buttons */
+            .input-group {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 10px;
+            }
+            input[type="text"] {
+                flex-grow: 1;
+                padding: 10px;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+            }
+            select {
+                padding: 10px;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+                background: white;
+            }
+
+            button {
+                padding: 8px 14px;
+                cursor: pointer;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-weight: 600;
+                transition: background 0.2s;
+            }
+            button.primary {
+                background: #0366d6;
+            }
+            button.primary:hover {
+                background: #005cc5;
+            }
+            button.secondary {
+                background: #6c757d;
+            }
+            button.secondary:hover {
+                background: #5a6268;
+            }
+            button.green {
+                background: #28a745;
+            }
+            button.green:hover {
+                background: #218838;
+            }
+            button.red {
+                background: #d73a49;
+            }
+            button.red:hover {
+                background: #c03440;
+            }
+            button.orange {
+                background: #fd7e14;
+            }
+            button.orange:hover {
+                background: #e36d0d;
+            }
+
+            /* File List */
+            .file-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 12px;
+                border-bottom: 1px solid #eee;
+            }
+            .file-item:last-child {
+                border-bottom: none;
+            }
+            .file-item:hover {
+                background-color: #f8f9fa;
+            }
+            .dir-link {
+                color: #0366d6;
+                cursor: pointer;
+                font-weight: bold;
+            }
+            .dir-link:hover {
+                text-decoration: underline;
+            }
+            .file-actions {
+                display: flex;
+                gap: 8px;
+            }
+
+            #jobResult {
+                margin-top: 15px;
+                padding: 15px;
+                background: #e6fffa;
+                border: 1px solid #b2f5ea;
+                border-radius: 6px;
+                display: none;
+            }
+
+            /* Modal Styles */
+            .modal-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                display: none;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            }
+            .modal {
+                background: white;
+                padding: 2rem;
+                border-radius: 8px;
+                width: 400px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            }
+            .modal h2 {
+                margin-top: 0;
+            }
+            .modal-buttons {
+                margin-top: 1.5rem;
+                display: flex;
+                justify-content: flex-end;
+                gap: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Media Processor</h1>
+
+        <!-- Download Section -->
+        <div class="card">
+            <h3>1. Download File</h3>
+            <div class="input-group">
+                <input
+                    type="text"
+                    id="urlInput"
+                    placeholder="URL (e.g. https://example.com/file.zip)"
+                />
+            </div>
+            <div class="input-group">
+                <input
+                    type="text"
+                    id="nameInput"
+                    placeholder="Save as... (Optional, e.g. archive.zip)"
+                />
+            </div>
+            <div style="margin-bottom: 10px">
+                <label
+                    ><input type="checkbox" id="autoZip" /> Zip file after
+                    download</label
+                >
+            </div>
+            <button class="primary" onclick="startDownload()">
+                Start Download
+            </button>
+            <div id="jobResult"></div>
+        </div>
+
+        <!-- File List Section -->
+        <div class="card">
+            <div
+                style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                "
+            >
+                <h3>2. Local Files</h3>
+                <button class="green" onclick="loadFiles(currentDir)">
+                    Refresh
+                </button>
+            </div>
+            <div
+                id="currentPath"
+                style="font-family: monospace; color: #666; margin: 10px 0"
+            >
+                /downloads
+            </div>
+            <div id="fileList">Loading...</div>
+        </div>
+
+        <!-- REMUX MODAL -->
+        <div class="modal-overlay" id="remuxModal">
+            <div class="modal">
+                <h2>Remux File</h2>
+                <p
+                    id="remuxTargetFile"
+                    style="color: #666; word-break: break-all"
+                ></p>
+
+                <label
+                    style="display: block; margin-top: 10px; font-weight: bold"
+                    >Output Format:</label
+                >
+                <select id="remuxContainer" style="width: 100%">
+                    <option value="mkv">MKV (Matroska)</option>
+                    <option value="mp4">MP4 (MPEG-4)</option>
+                    <option value="avi">AVI</option>
+                    <option value="mov">MOV</option>
+                </select>
+
+                <label
+                    style="display: block; margin-top: 10px; font-weight: bold"
+                    >Output Filename:</label
+                >
+                <input
+                    type="text"
+                    id="remuxOutName"
+                    style="width: 94%"
+                    placeholder="Leave empty to auto-name"
+                />
+
+                <div class="modal-buttons">
+                    <button class="secondary" onclick="closeRemuxModal()">
+                        Cancel
+                    </button>
+                    <button class="primary" onclick="submitRemux()">
+                        Convert
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            let currentDir = "";
+            let selectedFileForRemux = ""; // Stores path for modal
+
+            // --- Core Functions ---
+
+            async function startDownload() {
+                const url = document.getElementById("urlInput").value;
+                const customName = document.getElementById("nameInput").value;
+                const autoZip = document.getElementById("autoZip").checked;
+                if (!url) return alert("Please enter a URL");
+
+                const res = await fetch("/api/download", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        url,
+                        custom_name: customName,
+                        auto_zip: autoZip,
+                    }),
+                });
+                const data = await res.json();
+                trackJob(data.job_id);
+            }
+
+            async function extract(filename) {
+                const res = await fetch("/api/extract", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ filename }),
+                });
+                const data = await res.json();
+                trackJob(data.job_id);
+            }
+
+            async function deleteFile(path) {
+                if (!confirm(`Delete ${path}? Cannot be undone.`)) return;
+                await fetch(`/api/files?path=${encodeURIComponent(path)}`, {
+                    method: "DELETE",
+                });
+                loadFiles(currentDir);
+            }
+
+            // --- Remux Modal Logic ---
+
+            function openRemuxModal(path) {
+                selectedFileForRemux = path;
+                const filename = path.split("/").pop();
+
+                // Auto-fill form
+                document.getElementById("remuxTargetFile").innerText = filename;
+                document.getElementById("remuxOutName").value =
+                    filename.split(".")[0];
+
+                // If it's mp4, default to mkv, else default to mp4
+                const ext = filename.split(".").pop().toLowerCase();
+                document.getElementById("remuxContainer").value =
+                    ext === "mp4" ? "mkv" : "mp4";
+
+                document.getElementById("remuxModal").style.display = "flex";
+            }
+
+            function closeRemuxModal() {
+                document.getElementById("remuxModal").style.display = "none";
+            }
+
+            async function submitRemux() {
+                const container =
+                    document.getElementById("remuxContainer").value;
+                const customOut = document.getElementById("remuxOutName").value;
+
+                closeRemuxModal();
+
+                const res = await fetch("/api/remux", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        filename: selectedFileForRemux,
+                        container,
+                        custom_out: customOut,
+                    }),
+                });
+                const data = await res.json();
+                trackJob(data.job_id);
+            }
+
+            // --- Job Tracking & Listing ---
+
+            function trackJob(id) {
+                const el = document.getElementById("jobResult");
+                el.style.display = "block";
+                el.innerHTML = `Job started...`;
+
+                const interval = setInterval(async () => {
+                    const res = await fetch(`/api/job/${id}`);
+                    const job = await res.json();
+
+                    let html = `<strong>Status:</strong> ${job.status} <br> <strong>Details:</strong> ${job.details}`;
+                    if (job.result_url) {
+                        html += `<br><br><a href="${job.result_url}" download><button class="green">Download Result</button></a>`;
+                    }
+                    el.innerHTML = html;
+
+                    if (job.status === "completed" || job.status === "failed") {
+                        clearInterval(interval);
+                        loadFiles(currentDir); // Refresh list to see new files
+                    }
+                }, 1000);
+            }
+
+            async function loadFiles(dir = "") {
+                const res = await fetch(
+                    `/api/files?dir=${encodeURIComponent(dir)}`,
+                );
+                const data = await res.json();
+                currentDir = data.current;
+                document.getElementById("currentPath").innerText =
+                    "/downloads/" + currentDir;
+
+                const list = document.getElementById("fileList");
+                list.innerHTML = "";
+
+                if (!data.files || data.files.length === 0) {
+                    list.innerHTML = '<p style="color:#777">Empty folder.</p>';
+                    return;
+                }
+
+                data.files.forEach((f) => {
+                    const div = document.createElement("div");
+                    div.className = "file-item";
+
+                    const ext = f.name.split(".").pop().toLowerCase();
+                    const isArchive = [
+                        "zip",
+                        "rar",
+                        "gz",
+                        "tar",
+                        "7z",
+                    ].includes(ext);
+                    const isVideo = [
+                        "mp4",
+                        "mkv",
+                        "avi",
+                        "mov",
+                        "webm",
+                    ].includes(ext);
+
+                    let icon = f.type === "dir" ? "📁" : "📄";
+                    let nameHtml =
+                        f.type === "dir"
+                            ? `<span class="dir-link" onclick="loadFiles('${f.path}')">${f.name}</span>`
+                            : `<span>${f.name} <small style="color:#999">(${(f.size / 1024 / 1024).toFixed(2)} MB)</small></span>`;
+
+                    let btns = "";
+                    if (f.name !== "..") {
+                        if (f.type !== "dir")
+                            btns += `<a href="/raw/${f.path}" download><button class="secondary">⬇</button></a> `;
+                        if (isArchive)
+                            btns += `<button class="orange" onclick="extract('${f.path}')">Extract</button> `;
+                        if (isVideo)
+                            btns += `<button class="primary" onclick="openRemuxModal('${f.path}')">Remux</button> `;
+                        btns += `<button class="red" onclick="deleteFile('${f.path}')">X</button>`;
+                    }
+
+                    div.innerHTML = `<div><span style="margin-right:10px">${icon}</span> ${nameHtml}</div> <div class="file-actions">${btns}</div>`;
+                    list.appendChild(div);
+                });
+            }
+
+            loadFiles("");
+        </script>
+    </body>
+</html>
